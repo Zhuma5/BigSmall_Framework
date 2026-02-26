@@ -69,21 +69,21 @@ namespace BigAndSmall
             }
             bool change = false;
 
-            IOrderedEnumerable<Gene> orderedGenes = allGenes
-                .OrderByDescending(gene => (gene.def.GetAllPawnExtensionsOnGene() is List<PawnExtension> genePawnExts && genePawnExts.Any())
-                ? genePawnExts.Max(x => x.priority + (x.HasGeneFilters ? 0.5f : 0))
-                : 0);
+            var orderedGenes = allGenes.Select(gene => (gene, extensions: gene.def.GetAllPawnExtensionsOnGene()))
+                .OrderByDescending(gene => gene.extensions.Count > 0 
+					? gene.extensions.Max(x => x.priority + (x.HasGeneFilters ? 0.5f : 0))
+					: 0);
 
             var hediffPawnExts = pawn.GetHediffExtensions<PawnExtension>();
-            foreach (var gene in orderedGenes)
+            foreach (var geneEntry in orderedGenes)
             {
-                if (!GeneCache.globalCache.TryGetValue(gene, out var geneCache))
+				Gene gene = geneEntry.gene;
+				if (!GeneCache.globalCache.TryGetValue(gene, out var geneCache))
                 {
                     GeneCache.globalCache[gene] = geneCache = new GeneCache(gene);
                 }
 
-                var genePawnExts = gene.def.GetAllPawnExtensionsOnGene();
-                string failReason = GeneShouldBeActive(gene, genePawnExts, hediffPawnExts, allPawnExts);
+                string failReason = GeneShouldBeActive(gene, geneEntry.extensions, hediffPawnExts, allPawnExts);
                 if (failReason != "")
                 {
                     if (!geneCache.isOverriden) genesDeactivated.Add(gene);
