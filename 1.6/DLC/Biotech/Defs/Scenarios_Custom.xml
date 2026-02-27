@@ -1,5 +1,5 @@
 <Defs>
-  <ScenarioDef Name="BS_CrashlandedXenoPlus">
+  <ScenarioDef Name="BS_CrashlandedXenoPlus" ParentName="ScenarioBase">
     <defName>BS_CrashlandedXenoPlus</defName>
     <label>Crashlanded on Alien Planet</label>
     <description>As per the crash-landed start except Wanderers and Space Refugees will have xenotypes much more often.</description>
@@ -9,18 +9,6 @@
         <def>PlayerFaction</def>
         <factionDef>BS_PlayerColonyXenoPlus</factionDef>
       </playerFaction>
-      <surfaceLayer>
-        <def>SurfaceLayerFixed</def>
-        <tag>Surface</tag>
-        <layer>Surface</layer>
-        <settingsDef>Surface</settingsDef>
-        <hide>true</hide>
-        <connections>
-          <Orbit MayRequire="Ludeon.RimWorld.Odyssey">
-            <zoomMode>ZoomOut</zoomMode>
-          </Orbit>
-        </connections>
-      </surfaceLayer>
       <parts>
 
         <!-- Config pages -->

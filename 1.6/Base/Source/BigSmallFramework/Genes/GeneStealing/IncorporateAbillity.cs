@@ -61,8 +61,7 @@ namespace BigAndSmall
             }
 
             var genesToPick = new List<GeneDef>();
-            
-            
+          
 
             if (stealTraits && targetPawn?.RaceProps?.Humanlike == true)
             {
@@ -70,7 +69,12 @@ namespace BigAndSmall
             }
             genePickCount += genesToPick.Count();
 
-            bool isBaseliner = genesOnCorpse != null && genesOnCorpse.Sum(x => x.def.biostatCpx) == 0;
+            bool isBaseliner = genesOnCorpse != null && genesOnCorpse.Sum(x => x.def.biostatCpx) == 0 && genesOnCorpse.Count < 6;
+            if (targetPawn?.genes is Pawn_GeneTracker gt)
+            {
+                if (gt.xenotype != XenotypeDefOf.Baseliner && !gt.hybrid)
+                    isBaseliner = false;
+            }
             // Try adding all the baseliner genes.
             if (isBaseliner)
             {
