@@ -59,7 +59,6 @@ namespace BigAndSmall
 
             var genesToPick = new List<GeneDef>();
           
-
             if (stealTraits && targetPawn?.RaceProps?.Humanlike == true)
             {
                 GetGenesFromTraits(targetPawn, genesToPick);
