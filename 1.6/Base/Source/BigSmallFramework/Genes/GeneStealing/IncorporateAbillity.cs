@@ -1,7 +1,7 @@
-﻿using RimWorld;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using RimWorld;
 using UnityEngine;
 using Verse;
 
@@ -19,24 +19,22 @@ namespace BigAndSmall
 
     public class CompProperties_IncorporateEffect : CompAbilityEffect
     {
-        public new CompProperties_Incorporate Props => (CompProperties_Incorporate)props;
+        public new CompProperties_Incorporate Props => props as CompProperties_Incorporate;
 
         public override void Apply(LocalTargetInfo target, LocalTargetInfo dest)
         {
             var pawn = parent.pawn;
-            var corpse = (Corpse)target.Thing;
-            if (corpse == null)
+            var targetThing = target.Thing;
+            if (targetThing == null)
             {
-                Log.Warning($"Target {target.Thing} is not a corse");
                 return;
             }
 
-            IncorporateGenes(pawn, corpse, genePickCount: Props.pickCount, stealTraits:Props.stealTraits);
-
+            IncorporateGenes(pawn, targetThing, genePickCount: Props?.pickCount ?? 2, stealTraits: Props?.stealTraits ?? true);
         }
 
-        public static void IncorporateGenes(Pawn pawn, object target, int genePickCount=4, bool stealTraits=true,
-            bool userPicks=true, int randomPickCount=4, bool excludeBodySwap=false)
+        public static void IncorporateGenes(Pawn pawn, object target, int genePickCount = 4, bool stealTraits = true,
+            bool userPicks = true, int randomPickCount = 4, bool excludeBodySwap = false)
         {
             Pawn targetPawn = target as Pawn;
             if (targetPawn == null)
@@ -51,11 +49,10 @@ namespace BigAndSmall
             }
 
             var genesOnCorpse = targetPawn?.genes?.GenesListForReading;
-            List<GeneDef> unpickedGenes = genesOnCorpse?.Select(x => x.def).ToList() ?? [];
-            unpickedGenes.AddRange(GenesFromSpecial.GetGenesFromAnomalyCreature(targetPawn).Where(x=>x != null));
+            List<GeneDef> unpickedGenes = genesOnCorpse?.Select(x => x.def).ToList() ?? new List<GeneDef>();
+            unpickedGenes.AddRange(GenesFromSpecial.GetGenesFromAnomalyCreature(targetPawn).Where(x => x != null));
             if (genesOnCorpse == null && unpickedGenes.Count == 0)
             {
-                // Replace these with messages. Preferably notify the user via a message popup.
                 Log.Warning($"Target {targetPawn} has no valid genes");
                 return;
             }
@@ -75,7 +72,6 @@ namespace BigAndSmall
                 if (gt.xenotype != XenotypeDefOf.Baseliner && !gt.hybrid)
                     isBaseliner = false;
             }
-            // Try adding all the baseliner genes.
             if (isBaseliner)
             {
                 var humanGeneList = new List<string>
@@ -92,8 +88,7 @@ namespace BigAndSmall
                 unpickedGenes.AddRange(baseLinerGenes);
             }
 
-            // If the pawn already has a body-type gene, don't swap it. It is a bit too extreme of a change since it can remove bionics and such.
-            if (excludeBodySwap && pawn.genes.GenesListForReading.Any(x=>x.def.exclusionTags?.Contains("ThingDefSwap") == true))
+            if (excludeBodySwap && pawn.genes.GenesListForReading.Any(x => x.def.exclusionTags?.Contains("ThingDefSwap") == true))
             {
                 unpickedGenes = unpickedGenes.Where(x => x.exclusionTags?.Contains("ThingDefSwap") == false).ToList();
             }
@@ -118,15 +113,13 @@ namespace BigAndSmall
                 ReplaceGeneInList(genesToPick, allGeneDefs, "BS_GeneStabilizing_Moderate", "Instability_Mild");
             }
             catch { }
-            
-            // Remove genes the pawn already has in their xenogene list.
-            genesToPick.RemoveAll(x => pawn.genes.Xenogenes.Select(g=>g.def).Contains(x));
+
+            genesToPick.RemoveAll(x => pawn.genes.Xenogenes.Select(g => g.def).Contains(x));
 
             if (genesToPick.Any())
             {
                 if (userPicks)
                 {
-                    // Reverse so traits (etc.) are at the bottom.
                     genesToPick.Reverse();
                     Find.WindowStack.Add(new Dialog_PickGenes(pawn, genesToPick));
                 }
@@ -165,7 +158,7 @@ namespace BigAndSmall
             }
         }
 
-        public static void GetGenesFromTraits(Pawn target, List<GeneDef> genesToPick, bool onlyZeroCostGenes=false)
+        public static void GetGenesFromTraits(Pawn target, List<GeneDef> genesToPick, bool onlyZeroCostGenes = false)
         {
             if (target == null) return;
             var allGeneDefs = DefDatabase<GeneDef>.AllDefsListForReading;
@@ -247,25 +240,21 @@ namespace BigAndSmall
             base.PostApplied(targets, map);
             foreach (var target in targets)
             {
-                var corpse = (Corpse)target.Thing;
-                corpse?.Destroy();
+                target.Thing?.Destroy();
             }
             RemoveGenesOverLimit(parent.pawn, -9);
         }
 
-        // Don't refactor this. It is currently patched by Keyz for Samuel Streamer's run.
         public static bool RemoveGenesOverLimit(Pawn pawn, int limit)
         {
             var xGenes = pawn.genes.Xenogenes;
             bool removed = false;
 
             int idx = 0;
-            // Sum up the metabolism cost of the new genes
             while (pawn.genes.GenesListForReading.Where(x => !x.Overridden).Sum(x => x.def.biostatMet) < limit || idx > 100)
             {
                 if (xGenes.Count == 0)
                     break;
-                // Pick a random gene from the newGenes with a negative metabolism cost and remove it.
                 var geneToRemove = xGenes.Where(x => x.def.biostatMet <= 1).RandomElement();
                 if (geneToRemove != null)
                 {
@@ -276,95 +265,294 @@ namespace BigAndSmall
                 {
                     break;
                 }
-                idx++;  // Ensure we don't get stuck in an infinite loop no matter what.
+                idx++;
             }
             if (removed)
             {
                 Messages.Message($"BS_GenesRemovedByOverLimit".Translate(pawn.Name.ToStringShort, idx, limit), pawn, MessageTypeDefOf.NegativeHealthEvent);
             }
-            
+
             return removed;
         }
     }
-    // UI grabbed from another mod.
     public class Dialog_PickGenes : Window
     {
-        private GeneDef pickedGene;
-        public List<GeneDef> geneChoices;
-        private float scrollHeight;
-        private Vector2 scrollPosition;
-        public Pawn pawn;
+        private Pawn caster;
+        private List<GeneDef> availableGenes;
+        private GeneDef selectedGene;
         public string letterTextKey;
 
-        public override Vector2 InitialSize => new Vector2(420f, 340f);
+        private Vector2 scrollPositionGenes;
+        private Vector2 scrollPositionCaster;
+        private Vector2 scrollPositionDetails;
+        private RimWorld.QuickSearchWidget quickSearchWidget = new RimWorld.QuickSearchWidget();
+        private List<Gene> casterXenogenes;
+        private List<Gene> casterEndogenes;
+        private List<GeneDef> filteredGenes = new List<GeneDef>();
 
-        public Dialog_PickGenes(Pawn pawn, List<GeneDef> geneChoices)
+        public override Vector2 InitialSize => new Vector2(850f, 650f);
+
+        public Dialog_PickGenes(Pawn caster, List<GeneDef> availableGenes)
         {
-            this.pawn = pawn;
-            this.geneChoices = geneChoices;
-            pickedGene = geneChoices.First();
-            forcePause = true;
-            absorbInputAroundWindow = true;
-            if (!SelectionsMade())
+            this.caster = caster;
+            this.availableGenes = availableGenes;
+            this.casterXenogenes = caster.genes.Xenogenes;
+            this.casterEndogenes = caster.genes.Endogenes;
+            this.forcePause = true;
+            this.doCloseX = true;
+            this.doCloseButton = false;
+            this.absorbInputAroundWindow = true;
+            this.closeOnClickedOutside = false;
+            UpdateFilteredGenes();
+            if (filteredGenes.Count > 0)
             {
-                closeOnAccept = false;
-                closeOnCancel = false;
+                selectedGene = filteredGenes[0];
             }
         }
 
-        public static List<string> BodyShapeGeneNames =>
-        [
+        private void UpdateFilteredGenes()
+        {
+            filteredGenes.Clear();
+            foreach (var gene in availableGenes)
+            {
+                if (quickSearchWidget.filter.Matches(gene.label))
+                {
+                    filteredGenes.Add(gene);
+                }
+            }
+            scrollPositionGenes = Vector2.zero;
+        }
+
+        public override void DoWindowContents(Rect inRect)
+        {
+            Rect headerRect = new Rect(0f, 0f, inRect.width, 35f);
+            Text.Font = GameFont.Medium;
+            Widgets.Label(headerRect, "BS_PickAListedGene".Translate(caster).Resolve());
+            Text.Font = GameFont.Small;
+
+            // Header controls
+            Rect searchRect = new Rect(0f, 45f, 300f, 24f);
+            quickSearchWidget.OnGUI(searchRect, UpdateFilteredGenes);
+
+            // Main Content
+            Rect mainRect = new Rect(0f, 85f, inRect.width, inRect.height - 85f - 110f);
+            Rect leftRect = mainRect.LeftPart(0.50f);
+            Rect rightRect = mainRect.RightPart(0.48f);
+
+            // Left side: Gene List
+            float scrollbarWidth = 16f;
+            float geneWidth = 87f;
+            float geneHeight = 68f;
+            float gap = 4f;
+
+            // 1. Available Genes Panel
+            Rect availableRect = new Rect(leftRect.x, leftRect.y, leftRect.width, leftRect.height * 0.60f);
+            Widgets.DrawMenuSection(availableRect);
+            Rect availableOutRect = availableRect.ContractedBy(4f);
+            int availableCols = Mathf.FloorToInt((availableOutRect.width - scrollbarWidth - 4f) / (geneWidth + gap));
+            if (availableCols <= 0) availableCols = 1;
+
+            Rect availableViewRect = new Rect(0f, 0f, availableOutRect.width - scrollbarWidth, CalculateAvailableScrollHeight(availableCols));
+            Widgets.BeginScrollView(availableOutRect, ref scrollPositionGenes, availableViewRect);
+
+            float curY = 0f;
+            Rect sectionHeaderRect = new Rect(0f, curY, availableViewRect.width, 24f);
+            Widgets.Label(sectionHeaderRect, "Available to Incorporate:".Colorize(ColoredText.TipSectionTitleColor));
+            curY += 28f;
+
+            for (int i = 0; i < filteredGenes.Count; i++)
+            {
+                var gene = filteredGenes[i];
+                int row = i / availableCols;
+                int col = i % availableCols;
+                Rect geneRect = new Rect(col * (geneWidth + gap), curY + row * (geneHeight + gap), geneWidth, geneHeight);
+
+                if (selectedGene == gene)
+                {
+                    Widgets.DrawHighlightSelected(geneRect);
+                }
+                if (Widgets.ButtonInvisible(geneRect))
+                {
+                    selectedGene = gene;
+                    scrollPositionDetails = Vector2.zero;
+                    // SoundDefOf.Tick_High.PlayOneShotOnCamera();
+                }
+                GeneUIUtility.DrawGeneDef(gene, geneRect, GeneType.Xenogene, null, true, true, false);
+            }
+            Widgets.EndScrollView();
+
+            // 2. Caster's Genes Panel
+            Rect casterLabelRect = new Rect(leftRect.x, availableRect.yMax + 8f, leftRect.width, 24f);
+            Widgets.Label(casterLabelRect, (caster.LabelShortCap + "'s genes:").Colorize(ColoredText.TipSectionTitleColor));
+
+            Rect casterRect = new Rect(leftRect.x, casterLabelRect.yMax, leftRect.width, leftRect.height - availableRect.height - 32f);
+            Widgets.DrawMenuSection(casterRect);
+            Rect casterOutRect = casterRect.ContractedBy(4f);
+            int casterCols = Mathf.FloorToInt((casterOutRect.width - scrollbarWidth - 4f) / (geneWidth + gap));
+            if (casterCols <= 0) casterCols = 1;
+
+            Rect casterViewRect = new Rect(0f, 0f, casterOutRect.width - scrollbarWidth, CalculateCasterScrollHeight(casterCols));
+            Widgets.BeginScrollView(casterOutRect, ref scrollPositionCaster, casterViewRect);
+
+            curY = 0f;
+            // Draw Endogenes
+            for (int i = 0; i < casterEndogenes.Count; i++)
+            {
+                int row = i / casterCols;
+                int col = i % casterCols;
+                Rect geneRect = new Rect(col * (geneWidth + gap), curY + row * (geneHeight + gap), geneWidth, geneHeight);
+                GeneUIUtility.DrawGeneDef(casterEndogenes[i].def, geneRect, GeneType.Endogene, null, true, false, casterEndogenes[i].Overridden);
+            }
+
+            if (casterEndogenes.Count > 0 && casterXenogenes.Count > 0)
+            {
+                curY += Mathf.CeilToInt(casterEndogenes.Count / (float)casterCols) * (geneHeight + gap) + 4f;
+                Widgets.DrawLineHorizontal(4f, curY, casterViewRect.width - 8f);
+                curY += 8f;
+            }
+
+            // Draw Xenogenes
+            for (int i = 0; i < casterXenogenes.Count; i++)
+            {
+                int row = i / casterCols;
+                int col = i % casterCols;
+                Rect geneRect = new Rect(col * (geneWidth + gap), curY + row * (geneHeight + gap), geneWidth, geneHeight);
+                GeneUIUtility.DrawGeneDef(casterXenogenes[i].def, geneRect, GeneType.Xenogene, null, true, false, casterXenogenes[i].Overridden);
+            }
+            Widgets.EndScrollView();
+
+            // Right side: Details
+            if (selectedGene != null)
+            {
+                Widgets.DrawMenuSection(rightRect);
+                Rect infoRect = rightRect.ContractedBy(12f);
+                float detailsY = infoRect.y;
+
+                Text.Font = GameFont.Medium;
+                Widgets.Label(new Rect(infoRect.x, detailsY, infoRect.width, 30f), selectedGene.LabelCap);
+                detailsY += 35f;
+                Text.Font = GameFont.Small;
+
+                float statsHeight = BiostatsTable.HeightForBiostats(selectedGene.biostatArc);
+                Rect statsRect = new Rect(infoRect.x, detailsY, infoRect.width, statsHeight);
+                BiostatsTable.Draw(statsRect, selectedGene.biostatCpx, selectedGene.biostatMet, selectedGene.biostatArc, false, false);
+                detailsY += statsHeight + 10f;
+
+                Widgets.DrawLineHorizontal(infoRect.x, detailsY, infoRect.width);
+                detailsY += 10f;
+
+                Rect descOutRect = new Rect(infoRect.x, detailsY, infoRect.width, infoRect.height - (detailsY - infoRect.y));
+                string fullDesc = selectedGene.DescriptionFull;
+                float textHeight = Text.CalcHeight(fullDesc, descOutRect.width - 16f);
+                Rect descViewRect = new Rect(0f, 0f, descOutRect.width - 16f, textHeight);
+
+                Widgets.BeginScrollView(descOutRect, ref scrollPositionDetails, descViewRect);
+                Widgets.Label(new Rect(0f, 0f, descViewRect.width, textHeight), fullDesc);
+                Widgets.EndScrollView();
+            }
+
+            // Bottom: Pawn Status and Buttons
+            Rect bottomArea = new Rect(0f, inRect.height - 100f, inRect.width, 100f);
+            Widgets.DrawLineHorizontal(0f, bottomArea.y, inRect.width);
+
+            int currentMet = caster.genes.GenesListForReading.Where(x => !x.Overridden).Sum(x => x.def.biostatMet);
+            int resultingMet = currentMet;
+            if (selectedGene != null)
+            {
+                resultingMet += selectedGene.biostatMet;
+            }
+
+            Rect statusRect = new Rect(10f, bottomArea.y + 6f, inRect.width - 20f, 24f);
+            string metText = $"Current Metabolic Efficiency: {currentMet}";
+            int metabolismLimit = -9;
+            if (selectedGene != null)
+            {
+                string color = resultingMet < metabolismLimit ? "red" : "cyan";
+                metText += $" -> <color={color}>{resultingMet}</color> (Min: {metabolismLimit})";
+            }
+            else
+            {
+                metText += $" (Min: {metabolismLimit})";
+            }
+            Widgets.Label(statusRect, metText);
+
+            if (resultingMet < metabolismLimit)
+            {
+                Rect warningRect = new Rect(10f, statusRect.yMax - 2f, inRect.width - 20f, 20f);
+                GUI.color = ColorLibrary.RedReadable;
+                Widgets.Label(warningRect, "Warning: Metabolism will be too low. Random genes will be removed!");
+                GUI.color = Color.white;
+            }
+
+            // Buttons
+            float buttonY = inRect.height - 40f;
+            if (Widgets.ButtonText(new Rect(inRect.width / 2f - 160f, buttonY, 150f, 38f), "Cancel"))
+            {
+                Close();
+            }
+
+            if (Widgets.ButtonText(new Rect(inRect.width / 2f + 10f, buttonY, 150f, 38f), "Incorporate Gene"))
+            {
+                Accept();
+            }
+        }
+
+        private float CalculateAvailableScrollHeight(int cols)
+        {
+            if (filteredGenes.Count == 0) return 30f;
+            float geneHeight = 68f;
+            float gap = 4f;
+            return 28f + Mathf.CeilToInt(filteredGenes.Count / (float)cols) * (geneHeight + gap);
+        }
+
+        private float CalculateCasterScrollHeight(int cols)
+        {
+            float geneHeight = 68f;
+            float gap = 4f;
+            float h = 0f;
+            if (casterEndogenes.Count > 0)
+            {
+                h += Mathf.CeilToInt(casterEndogenes.Count / (float)cols) * (geneHeight + gap);
+            }
+            if (casterEndogenes.Count > 0 && casterXenogenes.Count > 0)
+            {
+                h += 12f;
+            }
+            if (casterXenogenes.Count > 0)
+            {
+                h += Mathf.CeilToInt(casterXenogenes.Count / (float)cols) * (geneHeight + gap);
+            }
+            return Mathf.Max(h, 40f);
+        }
+
+        private void Accept()
+        {
+            if (selectedGene == null) return;
+
+            GainGene(caster, selectedGene);
+            HumanoidPawnScaler.GetInvalidateLater(caster);
+            this.Close();
+        }
+
+        public static List<string> BodyShapeGeneNames => new List<string>
+        {
             "Body_Standard",
             "Body_Hulk",
             "Body_Fat",
             "Body_Thin",
-        ];
+        };
 
-        public static List<string> ForcedGenderGenes =>
-        [
+        public static List<string> ForcedGenderGenes => new List<string>
+        {
             "Body_MaleOnly",
             "Body_FemaleOnly",
-        ];
-
-        public override void DoWindowContents(Rect inRect)
-        {
-            float curY = 0f;
-            Widgets.Label(0f, ref curY, inRect.width, "BS_PickAListedGene".Translate(pawn).Resolve() + ":");
-            Rect outRect = new Rect(inRect.x, curY + 15f, inRect.width, inRect.height - 50f);
-            outRect.yMax -= 4f + CloseButSize.y;
-            Text.Font = GameFont.Small;
-            curY = outRect.y;
-            Rect viewRect = new Rect(outRect.x, outRect.y, outRect.width - 16f, scrollHeight);
-            Widgets.BeginScrollView(outRect, ref scrollPosition, viewRect);
-            DrawGeneChoices(viewRect.width, ref curY);
-            if (Event.current.type == EventType.Layout)
-            {
-                scrollHeight = Mathf.Max(curY - 24f - 15f, outRect.height);
-            }
-            Widgets.EndScrollView();
-            Rect rect = new Rect(0f, outRect.yMax+15f, inRect.width, CloseButSize.y);
-            AcceptanceReport acceptanceReport = CanClose();
-            if (Widgets.ButtonText(new Rect(rect.x, rect.y, CloseButSize.x, CloseButSize.y), "Cancel".Translate()))
-            {
-                Close();
-            }
-            if (Widgets.ButtonText(new Rect(rect.xMax - CloseButSize.x, rect.y, CloseButSize.x, CloseButSize.y), "OK".Translate()))
-            {
-                if (acceptanceReport.Accepted)
-                {
-                    GainGene(pawn, pickedGene);
-                    HumanoidPawnScaler.GetInvalidateLater(pawn);  // Update the cache.
-                    Close();
-                }
-            }
-        }
+        };
 
         public static void GainGene(Pawn pawn, GeneDef gene)
         {
-            // Remove forced gender and body genes if the new ones is of that type.
             if (BodyShapeGeneNames.Contains(gene.defName))
             {
-                foreach(var bodyShapeGene in pawn.genes.GenesListForReading.Where(x => BodyShapeGeneNames.Contains(x.def.defName)))
+                foreach (var bodyShapeGene in pawn.genes.GenesListForReading.Where(x => BodyShapeGeneNames.Contains(x.def.defName)))
                 {
                     pawn.genes.RemoveGene(bodyShapeGene);
                 }
@@ -388,46 +576,6 @@ namespace BigAndSmall
             }
 
             pawn.genes.AddGene(gene, xenogene: true);
-        }
-
-        private bool SelectionsMade()
-        {
-            if (!geneChoices.NullOrEmpty() && geneChoices == null)
-            {
-                return false;
-            }
-            return true;
-        }
-
-        private AcceptanceReport CanClose()
-        {
-            if (!SelectionsMade())
-            {
-                return "SelectAGene".Translate();
-            }
-            return AcceptanceReport.WasAccepted;
-        }
-
-        private void DrawGeneChoices(float width, ref float curY)
-        {
-            if (geneChoices.NullOrEmpty())
-            {
-                return;
-            }
-            Listing_Standard listing_Standard = new Listing_Standard();
-            Rect rect = new Rect(0f, curY, 360, 99999f);
-            listing_Standard.Begin(rect);
-
-            foreach (GeneDef geneChoice in geneChoices)
-            {
-                if (listing_Standard.RadioButton($"{geneChoice.LabelCap}, (" + "BS_Metabolism".Translate() +$": {geneChoice.biostatMet})",
-                    pickedGene == geneChoice, 30f, tooltip: geneChoice.description))
-                {
-                    pickedGene = geneChoice;
-                }
-            }
-            listing_Standard.End();
-            curY += listing_Standard.CurHeight + 10f + 4f;
         }
     }
 }
