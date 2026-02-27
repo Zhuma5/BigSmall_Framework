@@ -285,8 +285,21 @@ namespace BigAndSmall
         private List<Gene> casterXenogenes;
         private List<Gene> casterEndogenes;
         private List<GeneDef> filteredGenes = new List<GeneDef>();
+        private static Vector2 lastWindowSize = Vector2.zero;
 
-        public override Vector2 InitialSize => new Vector2(850f, 650f);
+        public override Vector2 InitialSize
+        {
+            get
+            {
+                if (lastWindowSize == Vector2.zero)
+                {
+                    float w = Mathf.Clamp(UI.screenWidth * 0.60f, 850f, 1200f);
+                    float h = Mathf.Clamp(UI.screenHeight * 0.70f, 650f, 900f);
+                    lastWindowSize = new Vector2(w, h);
+                }
+                return lastWindowSize;
+            }
+        }
 
         public Dialog_PickGenes(Pawn caster, List<GeneDef> availableGenes)
         {
@@ -299,6 +312,9 @@ namespace BigAndSmall
             this.doCloseButton = false;
             this.absorbInputAroundWindow = true;
             this.closeOnClickedOutside = false;
+            this.draggable = true;
+            this.resizeable = true;
+            this.drawShadow = true;
             UpdateFilteredGenes();
             if (filteredGenes.Count > 0)
             {
@@ -331,9 +347,10 @@ namespace BigAndSmall
             quickSearchWidget.OnGUI(searchRect, UpdateFilteredGenes);
 
             // Main Content
+            float rightWidth = 380f;
             Rect mainRect = new Rect(0f, 85f, inRect.width, inRect.height - 85f - 110f);
-            Rect leftRect = mainRect.LeftPart(0.50f);
-            Rect rightRect = mainRect.RightPart(0.48f);
+            Rect rightRect = new Rect(mainRect.xMax - rightWidth, mainRect.y, rightWidth, mainRect.height);
+            Rect leftRect = new Rect(mainRect.x, mainRect.y, mainRect.width - rightWidth - 12f, mainRect.height);
 
             // Left side: Gene List
             float scrollbarWidth = 16f;
@@ -519,6 +536,12 @@ namespace BigAndSmall
                 h += Mathf.CeilToInt(casterXenogenes.Count / (float)cols) * (geneHeight + gap);
             }
             return Mathf.Max(h, 40f);
+        }
+
+        public override void PostClose()
+        {
+            lastWindowSize = windowRect.size;
+            base.PostClose();
         }
 
         private void Accept()
