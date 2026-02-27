@@ -30,6 +30,7 @@ namespace BigAndSmall
         {
             // Quickfix for 1.6. Needs a proper rewrite to use the real system.
             if (selectedPawns.Count != 1) return;
+            if (selectedPawns.Any(x => x?.Map == null)) return;
             Pawn pawn = selectedPawns[0];
 
             List<Thing> thingList = IntVec3.FromVector3(clickPos).GetThingList(pawn.Map);

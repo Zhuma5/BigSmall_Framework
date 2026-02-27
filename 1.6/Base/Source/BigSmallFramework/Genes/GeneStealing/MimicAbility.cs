@@ -21,13 +21,6 @@ namespace BigAndSmall
         {
             base.Apply(target, dest);
 
-            // Remove all inactive genes.
-            //var inactiveGenes = Helpers.GetAllInactiveGenes(parent.pawn);
-            //foreach (var gene in inactiveGenes)
-            //{
-            //    parent.pawn?.genes?.RemoveGene(gene);
-            //}
-
             Discombobulator.IntegrateGenes(parent.pawn, removeOverriden:true);
         }
     }
@@ -72,8 +65,6 @@ namespace BigAndSmall
                     pawn?.genes?.RemoveGene(gene);
                 }
             }
-            //var geneDefsToRemove = pawn?.genes?.Xenogenes?.Where(gene => !genesToRetain.Contains(gene.def)).Select(x => x.def);
-            //pawn?.genes?.Xenogenes.RemoveAll(gene => !genesToRetain.Contains(gene.def));
 
             // Check for a skin-color gene
             var activeGenes = GeneHelpers.GetAllActiveGenes(pawn);
@@ -129,6 +120,23 @@ namespace BigAndSmall
             DoMimic(pawn, corpse, genesToRetain:Props.genesToRetain);
         }
 
+        public static bool ShouldSkipGene(GeneDef def)
+        {
+            var pawnExts = def.GetAllPawnExtensions();
+            if (pawnExts != null)
+            {
+                foreach (var pawnExt in pawnExts)
+                {
+                    if (pawnExt.morphTargets.NullOrEmpty() == false)
+                        return true;
+                    if (pawnExt.morphSettings != null)
+                        return true;
+                }
+
+            }
+            return false;
+        }
+
         public static void DoMimic(Pawn pawn, Corpse corpse, List<GeneDef> genesToRetain, bool spawnGibblets=true, bool addCorpseGenes=true, bool addCorpseRace=true)
         {
             CompProperticesMimicOffEffect.EndMimicry(pawn, genesToRetain);
@@ -144,6 +152,8 @@ namespace BigAndSmall
                 // Add all active genes from the corpse
                 var activeGenes = GeneHelpers.GetAllActiveGenes(corpse?.InnerPawn);
                 var genesToPick = activeGenes.Select(gene => gene.def).ToList();
+
+                genesToPick = genesToPick.Where(x => !ShouldSkipGene(x)).ToList();
 
                 // Remove all xenogenes except those in genesToRetain
                 pawn.genes.Xenogenes.RemoveAll(gene => !genesToRetain.Contains(gene.def));

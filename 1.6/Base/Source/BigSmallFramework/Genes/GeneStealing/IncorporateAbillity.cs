@@ -58,16 +58,19 @@ namespace BigAndSmall
             }
 
             var genesToPick = new List<GeneDef>();
-
-
-
+          
             if (stealTraits && targetPawn?.RaceProps?.Humanlike == true)
             {
                 GetGenesFromTraits(targetPawn, genesToPick);
             }
             genePickCount += genesToPick.Count();
 
-            bool isBaseliner = genesOnCorpse != null && genesOnCorpse.Sum(x => x.def.biostatCpx) == 0;
+            bool isBaseliner = genesOnCorpse != null && genesOnCorpse.Sum(x => x.def.biostatCpx) == 0 && genesOnCorpse.Count < 6;
+            if (targetPawn?.genes is Pawn_GeneTracker gt)
+            {
+                if (gt.xenotype != XenotypeDefOf.Baseliner && !gt.hybrid)
+                    isBaseliner = false;
+            }
             if (isBaseliner)
             {
                 var humanGeneList = new List<string>
