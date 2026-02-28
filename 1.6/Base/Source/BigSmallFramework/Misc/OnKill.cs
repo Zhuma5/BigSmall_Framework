@@ -19,7 +19,7 @@ namespace BigAndSmall
         {
             const int ticksPerDay = 60000;
 
-            // Check if the mod RedMattis.Undead is enabled. Otherwise abort.
+            // Check if the mod RedMattis.Undead is enabled. Otherwise skip Returned stuff.
             if (ModsConfig.IsActive("RedMattis.Undead") ||
                 ModsConfig.IsActive("RedMattis.Yokai") ||
                 ModsConfig.IsActive("RedMattis.Undead.ZombieApoc"))
@@ -40,13 +40,20 @@ namespace BigAndSmall
                 }
 
                 bool targetFar = (corpse?.Spawned == true || victim?.Spawned == true) && (instigator.Position.DistanceTo(position.Value) > 2);
-
-                var genExt = GeneHelpers.GetAllActiveGenes(instigator).Select(x => x.def.GetModExtension<PawnExtension>()).Where(x => x != null).ToList();
-                if (!targetFar && genExt.Any(x=>x.consumeSoulOnHit != null))
+                if (targetFar)
                 {
-                    var consumeSoulOnHit = genExt.First(x => x.consumeSoulOnHit != null).consumeSoulOnHit;
-                    var scHediff = CompAbilityEffect_ConsumeSoul.MakeGetSoulCollectorHediff(instigator);
-                    scHediff.AddPawnSoul(__instance, true, consumeSoulOnHit.gainMultiplier, consumeSoulOnHit.exponentialFalloff, consumeSoulOnHit.gainSkillMultiplier);
+                    return;
+                }
+
+                var pawnExts = instigator.GetAllPawnExtensions();
+                var siphons = pawnExts
+                    .Select(x => x.siphonSoul)
+                    .Where(x => x != null && x.type == SiphonType.KillingBlow);
+                if (siphons.Any())
+                {
+                    var fused = siphons.FuseAll(SiphonType.KillingBlow);
+                    var scHediff = Soul.GetOrAddSoulCollector(instigator);
+                    scHediff.AddPawnSoul(__instance, fused);
                     if (victim?.RaceProps?.Humanlike == true)
                     {
                         CompAbilityEffect_ConsumeSoul.ApplySoulless(victim);

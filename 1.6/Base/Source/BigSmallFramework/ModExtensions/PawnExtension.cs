@@ -229,17 +229,25 @@ namespace BigAndSmall
         public float? internalDamageDivisor = 1;
 
         /// Stats
-        public float soulFalloffStart = 0;
+        
+        // Soul
+        public float soulFalloffStart;
+        public float siphonFactorOffset;
+        public float siphonSkillFactorOffset;
         public string SoulPowerFalloffStartDescription => soulFalloffStart == 0 ? null : "BS_SoulPowerFalloffDesc".Translate(soulFalloffStart.ToStringPercentSigned());
+        public string SiphonSoulOffsetStartDescription => siphonFactorOffset == 0 ? null : "BS_SiphonSoulOffsetDesc".Translate(siphonFactorOffset.ToStringPercentSigned());
+        public string SiphonSkillOffsetStartDescription => siphonSkillFactorOffset == 0 ? null : "BS_SiphonSkillOffsetDesc".Translate(siphonSkillFactorOffset.ToStringPercentSigned());
         /// <summary>
         /// Trigger the soul-consume effect on hit.
         /// </summary>
-        public ConsumeSoul consumeSoulOnHit = null;
-        public string ConsumeSoulOnHitDescription => consumeSoulOnHit == null ? null : "BS_ConsumeSoulOnHitDesc".Translate($"{100 * consumeSoulOnHit.gainMultiplier:f0}%");
+        public SiphonSoul siphonSoul = null;
+        public string SoulSiphonDescription => siphonSoul == null ? null : siphonSoul.SiphonSoulDescription;
 
         public List<string> StatChangeDescriptions => [.. new List<string>
         {
             SoulPowerFalloffStartDescription,
+            SiphonSoulOffsetStartDescription,
+            SiphonSkillOffsetStartDescription,
             // TODO: Add other stats here later.
         }.Where(x => x != null)];
 

@@ -362,7 +362,7 @@
         <member name="F:BigAndSmall.PawnExtension.soulFalloffStart">
             Stats
         </member>
-        <member name="F:BigAndSmall.PawnExtension.consumeSoulOnHit">
+        <member name="F:BigAndSmall.PawnExtension.siphonSoul">
             <summary>
             Trigger the soul-consume effect on hit.
             </summary>

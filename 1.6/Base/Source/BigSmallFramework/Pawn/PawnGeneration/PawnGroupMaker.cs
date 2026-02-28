@@ -129,9 +129,12 @@ namespace BigAndSmall
 
         private static Pawn TryModifyPawn(Pawn member, bool singlePawn=false)
         {
-            if (member.kindDef?.GetModExtension<PawnKindExtension>() is PawnKindExtension pawnKindExt)
+            if (member.kindDef == null)
+                return member;
+
+            foreach (var ext in member.kindDef.ExtensionsOnDef<PawnKindExtension, PawnKindDef>())
             {
-                member = pawnKindExt.Execute(member, singlePawn: singlePawn);
+                member = ext.Execute(member, singlePawn: singlePawn);
             }
             return TryModifyHumanlike(member);
         }

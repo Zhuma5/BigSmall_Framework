@@ -6,6 +6,26 @@ using Verse;
 
 namespace BigAndSmall
 {
+    public static class Soul
+    {
+        public static SoulCollector GetOrAddSoulCollector(Pawn attacker)
+        {
+            if (BSDefs.BS_SoulCollector == null)
+            {
+                Log.Warning("Soul Collector Hediff is null. This is likely due to a missing mod or a missing def.");
+                return null;
+            }
+            SoulCollector soulCollector = (SoulCollector)attacker.health.hediffSet.GetFirstHediffOfDef(BSDefs.BS_SoulCollector);
+            if (soulCollector == null)
+            {
+                // Add the soul to the attacker.
+                attacker.health.AddHediff(BSDefs.BS_SoulCollector);
+                soulCollector = (SoulCollector)attacker.health.hediffSet.GetFirstHediffOfDef(BSDefs.BS_SoulCollector);
+            }
+            return soulCollector;
+        }
+    }
+
     public class CompProperties_ConsumeSoul : CompProperties_AbilityEffect
     {
         public float gainMultiplier = 1;
@@ -105,7 +125,14 @@ namespace BigAndSmall
             // Check if the attacker has Soul Collector hediff.
 
             SoulCollector soulCollector = MakeGetSoulCollectorHediff(attacker);
-            soulCollector.AddPawnSoul(victim, false, Props.gainMultiplier, Props.exponentialFalloff = 2.5f, Props.gainSkillMultiplier);
+            SiphonSoul parms = new SiphonSoul
+            {
+                type = 0,
+                gainMultiplier = Props.gainMultiplier,
+                exponentialFalloff = Props.exponentialFalloff,
+                gainSkillMultiplier = Props.gainSkillMultiplier
+            };
+            soulCollector.AddPawnSoul(victim, parms);
 
             // Remove 50 goodwill from the victim's faction. faction.
             victim.Faction?.TryAffectGoodwillWith(attacker.Faction, -35); // statOffsetsBySeverity
@@ -143,22 +170,7 @@ namespace BigAndSmall
             }
         }
 
-        public static SoulCollector MakeGetSoulCollectorHediff(Pawn attacker)
-        {
-            if (BSDefs.BS_SoulCollector == null)
-            {
-                Log.Warning("Soul Collector Hediff is null. This is likely due to a missing mod or a missing def.");
-                return null;
-            }
-            SoulCollector soulCollector = (SoulCollector)attacker.health.hediffSet.GetFirstHediffOfDef(BSDefs.BS_SoulCollector);
-            if (soulCollector == null)
-            {
-                // Add the soul to the attacker.
-                attacker.health.AddHediff(BSDefs.BS_SoulCollector);
-                soulCollector = (SoulCollector)attacker.health.hediffSet.GetFirstHediffOfDef(BSDefs.BS_SoulCollector);
-            }
-            return soulCollector;
-        }
+        public static SoulCollector MakeGetSoulCollectorHediff(Pawn attacker) => Soul.GetOrAddSoulCollector(attacker);
     }
 
     public class SoulCollector : HediffWithComps
@@ -173,7 +185,8 @@ namespace BigAndSmall
             Severity += amount;
         }
 
-        public void AddPawnSoul(Pawn target, bool attack, float multiplier = 1, float exponentialFalloff=2.5f, float? gainSkillMultiplier = null)
+        public void AddPawnSoul(Pawn target, SiphonSoul parms, bool verbose=false, float limitPerTrigger=2)
+            //SiphonType gainMethod, float baseAmount = 0, float multiplier = 1, float exponentialFalloff=2.5f, float? gainSkillMultiplier = null)
         {
             const float tuneSPGain = 0.25f;
             const float tunePSGain = 0.25f;
@@ -183,7 +196,7 @@ namespace BigAndSmall
             float gainPS = target.GetStatValue(StatDefOf.PsychicSensitivity) - 0.85f; // We mostly care about sensitivity ab1ove 1.
             float originalAmount = gainPS;
 
-            gainPS = Mathf.Max(0.1f, gainPS) * multiplier;
+            gainPS = Mathf.Max(0.1f, gainPS) * parms.gainMultiplier;
 
             float postCap = gainPS;
 
@@ -210,29 +223,41 @@ namespace BigAndSmall
 
             float gainFromSoulPower = target.GetStatValue(BSDefs.BS_SoulPower) * tuneSPGain;
 
-            float preFalloffTotalGain = gainPS + gainFromSoulPower;
+            float falloffStartOffset = pawn.GetAllPawnExtensions().Sum(x => x.soulFalloffStart);
+            float siphonFactor = 1 + pawn.GetAllPawnExtensions().Sum(x => x.siphonFactorOffset);
+            float siphonSkillMult = 1 + pawn.GetAllPawnExtensions().Sum(x => x.siphonSkillFactorOffset);
+
+            float preFalloffTotalGain = (gainPS + gainFromSoulPower + parms.baseAmount)* siphonFactor;
+
+
+            if (preFalloffTotalGain > limitPerTrigger)
+            {
+                // Clamp, but avoid being too obvious about it.
+                preFalloffTotalGain = Mathf.Clamp(Mathf.Lerp(preFalloffTotalGain, limitPerTrigger, 0.95f), 0, limitPerTrigger + 0.1f);
+            }
 
             if (Resource != null)
             {
                 Resource.Value += preFalloffTotalGain * 50;
             }
+            
+
 
             float actualGain = 0;
             const int itrrCount = 10;
             float softCapMod = pawn.GetStatValue(BSDefs.BS_SoulPower) - Severity; // Soul power 
-            softCapMod += pawn.GetAllPawnExtensions().Sum(x => x.soulFalloffStart);
+            softCapMod += falloffStartOffset;
             softCapMod += BigSmallMod.settings.soulPowerFalloffOffset;
             float adjustedV = Severity - softCapMod;
             // This is really just and ugly-looking way to make sure the falloff gets applied reasonably if adding a huge amount at the same time.
             for (int i = 0; i < itrrCount; i++)
             {
                 float itrrGain = gainPS / itrrCount;
-                if (adjustedV > 1) { itrrGain /= (Mathf.Pow(adjustedV + actualGain, exponentialFalloff)); }
+                if (adjustedV > 1) { itrrGain /= (Mathf.Pow(adjustedV + actualGain, parms.exponentialFalloff)); }
                 actualGain += itrrGain;
             }
-            Severity += actualGain * BigSmallMod.settings.soulPowerGainMultiplier;
-
-            
+            float finalResult = actualGain * BigSmallMod.settings.soulPowerGainMultiplier;
+            Severity += finalResult;
 
             if (pawn.needs?.TryGetNeed<Need_KillThirst>() is Need_KillThirst killThirst)
             {
@@ -240,13 +265,14 @@ namespace BigAndSmall
             }
             target.psychicEntropy?.OffsetPsyfocusDirectly(0.6f);
 
-            if (gainSkillMultiplier != null && target.skills != null)
+            if (verbose || actualGain > 0.2f)
             {
-                //foreach (var skill in pawn.skills.skills)
-                //{
-                //    skill.Learn(0.1f * gainSkillMultiplier.Value);
-                //}
-                float sGainMult = gainSkillMultiplier.Value * Mathf.Min(skillGainCap, preFalloffTotalGain);
+                Messages.Message("BS_GainedSoulPower".Translate(pawn.Name.ToStringShort, ($"{finalResult*100:f0}%"), BSDefs.BS_SoulPower.LabelCap, target.Name.ToStringShort), pawn, MessageTypeDefOf.PositiveEvent); 
+            }
+
+            if (parms.gainSkillMultiplier != null && target.skills != null)
+            {
+                float sGainMult = parms.gainSkillMultiplier.Value * siphonSkillMult * Mathf.Min(skillGainCap, preFalloffTotalGain);
                 SkillDef philophagySkillAndXpTransfer = PsychicRitualUtility.GetPhilophagySkillAndXpTransfer(pawn, target, sGainMult, out float xpTransfer);
                 if (philophagySkillAndXpTransfer == null)
                 {
@@ -258,12 +284,17 @@ namespace BigAndSmall
                     skill?.Learn(xpTransfer);
                     if (xpTransfer > 3000)
                     {
-                        if (attack)
+                        if (parms.type == SiphonType.KillingBlow)
                         {
                             Messages.Message("BS_StoleSkillAmount_Attack".Translate(pawn.Name.ToStringShort, xpTransfer, skill.def.label, target.Name.ToStringShort),
                                 pawn, MessageTypeDefOf.PositiveEvent);
                         }
-                        else //BS_StoleSkillAmount_Attack
+                        else if (parms.type == SiphonType.Influence)
+                        {
+                            Messages.Message("BS_StoleSkillAmount_Influence".Translate(pawn.Name.ToStringShort, xpTransfer, skill.def.label, target.Name.ToStringShort),
+                                pawn, MessageTypeDefOf.PositiveEvent);
+                        }
+                        else
                         {
                             Messages.Message("BS_StoleSkillAmount".Translate(pawn.Name.ToStringShort, xpTransfer, skill.def.label, target.Name.ToStringShort),
                                 pawn, MessageTypeDefOf.PositiveEvent);
@@ -272,9 +303,9 @@ namespace BigAndSmall
                 }
             }
 
-            if (Severity > 6) { Severity = 6; }
+            if (Severity > 10) { Severity = 10; }
 
-            if (target.Spawned)
+            if (target.Spawned && (parms.type == SiphonType.KillingBlow || parms.type == SiphonType.None))
             {
                 for (int i = 0; i < 5; i++)
                 {

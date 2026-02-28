@@ -3,9 +3,63 @@ using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 using Verse;
+using static HarmonyLib.Code;
 
 namespace BigAndSmall
 {
+    public class StatScaling
+    {
+        public string tag;
+        public StatDef stat;
+        public SimpleCurve curve;
+        public bool isOffset;
+    }
+    public class ProjectileByStat
+    {
+        public class ProjectileAtValue
+        {
+            public float value;
+            public ThingDef def;
+        }
+        public StatDef stat;
+        public List<ProjectileAtValue> projectileAtValue = [];
+
+        public ThingDef GetProjectileByStat(ThingDef previous, Pawn pawn)
+        {
+            float statV = stat == null ? 1 : pawn.GetStatValue(stat, cacheStaleAfterTicks: 100);
+            ProjectileAtValue result = null;
+            foreach(var pData in projectileAtValue)
+            {
+                if (pData.value > statV)
+                    continue;
+                if (result == null || result.value < pData.value)
+                    result = pData;
+            }
+            if (result == null) return previous;
+            return result.def;
+        }
+    }
+
+    public static class EffectByStatExtension
+    {
+        extension(IEnumerable<StatScaling> scalings)
+        {
+            public float ApplyScaling(float offset, string tag, Pawn pawn)
+            {
+                float factor = 1;
+                foreach (var scaling in scalings.Where(x => x.isOffset && x.tag == tag))
+                {
+                    offset += scaling.curve.Evaluate(pawn.GetStatValue(scaling.stat, cacheStaleAfterTicks: 100));
+                }
+                foreach (var scaling in scalings.Where(x => !x.isOffset && x.tag == tag))
+                {
+                    factor += scaling.curve.Evaluate(pawn.GetStatValue(scaling.stat, cacheStaleAfterTicks: 100));
+                }
+                return offset * factor;
+            }
+        }
+    }
+
     public class CompProperties_AbilitySprayLiquid : CompProperties_AbilityEffect
     {
         public ThingDef projectileDef;
@@ -13,7 +67,11 @@ namespace BigAndSmall
         public int radiusToHit;
 
         public EffecterDef sprayEffecter;
+        public int projectileCount = 1;
 
+        public List<StatScaling> scaling = [];
+        public ProjectileByStat projectileByStat;
+        public ThingDef GetProjectile(Pawn pawn) => projectileByStat?.GetProjectileByStat(projectileDef, pawn) ?? projectileDef;
         public CompProperties_AbilitySprayLiquid()
         {
             compClass = typeof(CompAbilityEffect_SprayLiquid);
@@ -30,11 +88,15 @@ namespace BigAndSmall
 
         private Pawn Pawn => parent.pawn;
 
+        public ThingDef GetProjectile() => Props.GetProjectile(Pawn);
+        public int GetRadius() => (int)Props.scaling.ApplyScaling(Props.radiusToHit, "AoE", Pawn);
+
         public override void Apply(LocalTargetInfo target, LocalTargetInfo dest)
         {
+            var projectileDef = GetProjectile();
             foreach (IntVec3 item in AffectedCells(target))
             {
-                ((Projectile)GenSpawn.Spawn(Props.projectileDef, Pawn.Position, Pawn.Map)).Launch(Pawn, Pawn.DrawPos, item, item, ProjectileHitFlags.IntendedTarget);
+                ((Projectile)GenSpawn.Spawn(projectileDef, Pawn.Position, Pawn.Map)).Launch(Pawn, Pawn.DrawPos, item, item, ProjectileHitFlags.IntendedTarget);
             }
             if (Props.sprayEffecter != null)
             {
@@ -45,17 +107,24 @@ namespace BigAndSmall
 
         public override void DrawEffectPreview(LocalTargetInfo target)
         {
-            GenDraw.DrawFieldEdges(AffectedCells(target));
+            int radius = GetRadius();
+            var projectileDef = GetProjectile();
+            if (projectileDef?.projectile?.explosionRadius > 0)
+            {
+                radius += Mathf.FloorToInt(projectileDef.projectile.explosionRadius);
+            }
+            GenDraw.DrawFieldEdges(AffectedCells(target, radius));
         }
 
         public override bool AICanTargetNow(LocalTargetInfo target)
         {
             if (Pawn.Faction != null)
             {
-                int radius = Props.radiusToHit;
-                if (Props.projectileDef?.projectile?.explosionRadius > 0)
+                int radius = GetRadius();
+                var projectileDef = GetProjectile();
+                if (projectileDef?.projectile?.explosionRadius > 0)
                 {
-                    radius += Mathf.FloorToInt(Props.projectileDef.projectile.explosionRadius);  
+                    radius += Mathf.FloorToInt(projectileDef.projectile.explosionRadius);  
                 }
 
                 foreach (IntVec3 item in AffectedCells(target, radiusOverride: radius))
@@ -73,7 +142,7 @@ namespace BigAndSmall
             return true;
         }
 
-        private List<IntVec3> AffectedCells(LocalTargetInfo target, int? radiusOverride=null)
+        protected List<IntVec3> AffectedCells(LocalTargetInfo target, int? radiusOverride=null)
         {
             tmpCellDots.Clear();
             tmpCells.Clear();
@@ -81,7 +150,7 @@ namespace BigAndSmall
 
             Vector3 targetVector = target.Cell.ToVector3Shifted().Yto0();
 
-            int radius = radiusOverride ?? Props.radiusToHit;
+            int radius = radiusOverride ?? GetRadius();
 
             if (radius > 0)
             {
@@ -114,12 +183,15 @@ namespace BigAndSmall
     public class CompProperties_AbilityConeAttack : CompProperties_AbilityEffect
     {
         public ThingDef projectileDef;
-        public int maxDistance = 100;
+        public int maxDistance = 10;
         public int minDistnace = 0;
         public int maxAngle = 90;
         public int minAngle = 90;
         public int maxConeLength = 9999;
         public int minimumRadiusAroundTarget = 0;
+        public List<StatScaling> scaling = [];
+        public ProjectileByStat projectileByStat;
+        public ThingDef GetProjectile(Pawn pawn) => projectileByStat?.GetProjectileByStat(projectileDef, pawn) ?? projectileDef;
 
         public CompProperties_AbilityConeAttack()
         {
@@ -132,11 +204,14 @@ namespace BigAndSmall
         private new CompProperties_AbilityConeAttack Props => (CompProperties_AbilityConeAttack)props;
         private Pawn Pawn => parent.pawn;
 
+        public int GetMaxDistance() => (int)Props.scaling.ApplyScaling(Props.maxDistance, "MaxRange", Pawn);
+
         public override void Apply(LocalTargetInfo target, LocalTargetInfo dest)
         {
+            var projectile = Props.GetProjectile(Pawn);
             foreach (IntVec3 cell in AffectedCells(target))
             {
-                ((Projectile)GenSpawn.Spawn(Props.projectileDef, Pawn.Position, Pawn.Map)).Launch(Pawn, Pawn.DrawPos, cell, cell, ProjectileHitFlags.IntendedTarget);
+                ((Projectile)GenSpawn.Spawn(projectile, Pawn.Position, Pawn.Map)).Launch(Pawn, Pawn.DrawPos, cell, cell, ProjectileHitFlags.IntendedTarget);
             }
             base.Apply(target, dest);
         }
@@ -173,7 +248,7 @@ namespace BigAndSmall
             var originalStartPosition = startPosition;
 
             // If the targetPos is closer than the min distance, push it out to that distance.
-            if ((targetPos - startPosition).magnitude < Props.minDistnace)
+            if ((targetPos - startPosition).magnitude < GetMaxDistance())
             {
                 targetPos = startPosition + (targetPos - startPosition).normalized * Props.minDistnace;
             }
