@@ -340,6 +340,7 @@ namespace BigAndSmall
 
         public override void DoWindowContents(Rect inRect)
         {
+            const float headerHeight = 28f;
             Rect headerRect = new Rect(0f, 0f, inRect.width, 35f);
             Text.Font = GameFont.Medium;
             Widgets.Label(headerRect, "BS_PickAListedGene".Translate(caster).Resolve());
@@ -350,19 +351,28 @@ namespace BigAndSmall
             quickSearchWidget.OnGUI(searchRect, UpdateFilteredGenes);
 
             // Main Content
-            float rightWidth = 380f;
+            const float rightWidth = 380f;
             Rect mainRect = new Rect(0f, 85f, inRect.width, inRect.height - 85f - 110f);
             Rect rightRect = new Rect(mainRect.xMax - rightWidth, mainRect.y, rightWidth, mainRect.height);
             Rect leftRect = new Rect(mainRect.x, mainRect.y, mainRect.width - rightWidth - 12f, mainRect.height);
 
             // Left side: Gene List
-            float scrollbarWidth = 16f;
-            float geneWidth = 87f;
-            float geneHeight = 68f;
-            float gap = 4f;
+            const float scrollbarWidth = 16f;
+            const float geneWidth = 87f;
+            const float geneHeight = 68f;
+            const float gap = 4f;
+
+            const float geneHeightWithGap = geneHeight + gap;
+            const float geneWidthWithGap = geneWidth + gap;
+            const float baseGeneListHeight = headerHeight + geneHeightWithGap + gap * 2;
 
             // 1. Available Genes Panel
-            Rect availableRect = new Rect(leftRect.x, leftRect.y, leftRect.width, leftRect.height * 0.60f);
+            int genesPerRow = Mathf.FloorToInt((leftRect.width - scrollbarWidth - 4f) / geneWidthWithGap);
+            float heightFromGeneCount = geneHeightWithGap * (filteredGenes.Count / genesPerRow);
+            float maxAvailableRectHeight = baseGeneListHeight + heightFromGeneCount;
+            float availableRectHeight = Mathf.Min(maxAvailableRectHeight, leftRect.height * 0.60f);
+            Rect availableRect = new Rect(leftRect.x, leftRect.y, leftRect.width, availableRectHeight);
+
             Widgets.DrawMenuSection(availableRect);
             Rect availableOutRect = availableRect.ContractedBy(4f);
             int availableCols = Mathf.FloorToInt((availableOutRect.width - scrollbarWidth - 4f) / (geneWidth + gap));
@@ -374,7 +384,7 @@ namespace BigAndSmall
             float curY = 0f;
             Rect sectionHeaderRect = new Rect(0f, curY, availableViewRect.width, 24f);
             Widgets.Label(sectionHeaderRect, "Available to Incorporate:".Colorize(ColoredText.TipSectionTitleColor));
-            curY += 28f;
+            curY += headerHeight;
 
             for (int i = 0; i < filteredGenes.Count; i++)
             {
